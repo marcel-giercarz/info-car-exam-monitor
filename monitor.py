@@ -216,6 +216,3 @@ class Monitor:
             logging.error(f"Scrap dates error: {e}")
             retries += 1
             time.sleep(5)
-
-
-Monitor()
