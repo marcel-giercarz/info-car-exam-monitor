@@ -1,0 +1,9 @@
+{
+    "login": "",
+    "password": "",
+    "max_exam_time": 7,
+    "category": "B",
+    "word_id": "",
+    "discord_webhook_url": "",
+    "delay": 10
+}
