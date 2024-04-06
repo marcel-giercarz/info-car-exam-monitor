@@ -55,7 +55,7 @@ class Config:
         self.word_id = None
         self.delay = 10
         self.category = "B"
-        self.max_exam_time = 10
+        self.max_exam_time = 7
         self.load_config()
 
     def load_config(self):
@@ -66,8 +66,8 @@ class Config:
             self.email = config_json.get("login", "")
             self.password = config_json.get("password", "")
             self.category = config_json.get("category", "B")
-            self.word_id = config_json.get("word_id", 21)
-            self.delay = config_json.get("delay", "10")
+            self.word_id = config_json.get("word_id", "")
+            self.delay = config_json.get("delay", 10)
             self.max_exam_time = config_json.get("max_exam_time", 7)
             self.webhook_url = config_json.get("discord_webhook_url", "")
         except FileNotFoundError:
@@ -78,6 +78,10 @@ class Config:
             exit()
         except json.decoder.JSONDecodeError:
             logging.error("Wrong format in config.json, delete it and run the program again")
+
+        if self.email == "" or self.password == "" or self.webhook_url == "" or self.word_id == "":
+            logging.error("Config file has missing fields. Check config.json!")
+            exit()
 
 
 class Monitor:
@@ -151,8 +155,8 @@ class Monitor:
                     logging.error(f"Error while getting auth token: {e}")
                     retries += 1
                     time.sleep(5)
+        logging.error("The login retries limit exceeded. Check your credentials.")
 
-    logging.error("The login retries limit exceeded. Check your credentials.")
 
 
     def scrap_dates(self) -> None:
@@ -212,7 +216,10 @@ class Monitor:
                                                  "%Y-%m-%d %H:%M:%S").timestamp() < max_date and datetime.strptime(
                                     exam_day + " " + exam_time, "%Y-%m-%d %H:%M:%S").timestamp() != last_date:
                                 logging.debug(f"Wolny termin dnia: {exam_day} na godzine: {exam_time}")
-                                self.send_discord_webhook(exam_day, exam_time)
+                                try:
+                                    self.send_discord_webhook(exam_day, exam_time)
+                                except:
+                                    logging.error("Error while sending discord webhook. Check your webhook url in config.json!")
 
                                 last_date = datetime.strptime(exam_day + " " + exam_time, "%Y-%m-%d %H:%M:%S").timestamp()
                                 break
