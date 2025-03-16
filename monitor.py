@@ -4,28 +4,45 @@ import socket
 import coloredlogs, logging
 import time
 import json
+import random
 from urllib3.connection import HTTPConnection
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from discord_webhook import DiscordWebhook, DiscordEmbed
 
-requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS = 'ALL:@SECLEVEL=0'
+requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS = 'ALL:@SECLEVEL=1'
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-HTTPConnection.default_socket_options = (
-        HTTPConnection.default_socket_options + [
-    (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
-    (socket.SOL_TCP, socket.TCP_KEEPIDLE, 45),
-    (socket.SOL_TCP, socket.TCP_KEEPINTVL, 10),
-    (socket.SOL_TCP, socket.TCP_KEEPCNT, 6)
+
+socket_options = [
+    (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
 ]
-)
+
+if hasattr(socket, 'TCP_KEEPIDLE'):
+    socket_options.append((socket.SOL_TCP, socket.TCP_KEEPIDLE, 45))
+if hasattr(socket, 'TCP_KEEPINTVL'):
+    socket_options.append((socket.SOL_TCP, socket.TCP_KEEPINTVL, 10))
+if hasattr(socket, 'TCP_KEEPCNT'):
+    socket_options.append((socket.SOL_TCP, socket.TCP_KEEPCNT, 6))
+
+HTTPConnection.default_socket_options = HTTPConnection.default_socket_options + socket_options
+
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+]
+
+def get_random_user_agent():
+    return random.choice(USER_AGENTS)
 
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
     'Accept-Language': 'pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7',
     'Connection': 'keep-alive',
     'Content-Type': 'application/x-www-form-urlencoded',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+    'User-Agent': get_random_user_agent(),
 }
 
 logging = logging.getLogger(__name__)
@@ -179,7 +196,7 @@ class Monitor:
                     'Sec-Fetch-Dest': 'empty',
                     'Sec-Fetch-Mode': 'cors',
                     'Sec-Fetch-Site': 'same-origin',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
+                    'User-Agent': get_random_user_agent(),
                     'dnt': '1',
                     'sec-ch-ua': '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
                     'sec-ch-ua-mobile': '?0',
@@ -227,7 +244,7 @@ class Monitor:
                                 break
                             break
 
-                    time.sleep(self.delay)
+                    time.sleep(self.delay + random.uniform(0,2))
 
         except Exception as e:
             logging.error(f"Scrap dates error: {e}")
