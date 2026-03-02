@@ -51,6 +51,10 @@ coloredlogs.install(level='DEBUG', logger=logging, fmt="[%(asctime)s] %(message)
                                   'name': {'color': 'blue'}, 'programname': {'color': 'cyan'},
                                   'username': {'color': 'yellow'}})
 
+BASE_URL = "https://info-car.pl"
+LOGIN_URL = f"{BASE_URL}/oauth2/login"
+AUTHORIZE_URL = f"{BASE_URL}/oauth2/authorize"
+EXAM_SCHEDULE_URL = f"{BASE_URL}/api/word/word-centers/exam-schedule"
 
 class Config:
     DEFAULT_CONFIG = {
@@ -64,7 +68,6 @@ class Config:
     }
 
     def __init__(self, config_file: str):
-
         self.config_file = config_file
         self.email = None
         self.password = None
@@ -122,7 +125,9 @@ class Monitor:
         while retries < max_retries:
             with requests.Session() as s:
                 logging.info("Logging in...")
-                url = "https://info-car.pl/oauth2/login"
+                url = LOGIN_URL
+                headers['User-Agent'] = get_random_user_agent()
+
                 try:
                     r = s.get(url, headers=headers, verify=False, allow_redirects=False, timeout=30)
                     soup = BeautifulSoup(r.text, 'lxml')
@@ -132,6 +137,8 @@ class Monitor:
                     logging.error(f"Error while scraping csrf_token: {e}")
                     retries += 1
                     time.sleep(5)
+                    logging.warning(f"Retrying... {retries}/{max_retries}")
+                    continue
 
                 data = [
                     ('username', self.email),
@@ -153,10 +160,12 @@ class Monitor:
                     logging.error(f"Send form error: {e}")
                     retries += 1
                     time.sleep(5)
+                    logging.warning(f"Retrying... {retries}/{max_retries}")
+                    continue
 
                 try:
                     r = s.get(
-                        'https://info-car.pl/oauth2/authorize?response_type=id_token%20token&client_id=client&redirect_uri=https%3A%2F%2Finfo-car.pl%2Fnew%2Fassets%2Frefresh.html&scope=openid%20profile%20email%20resource.read&prompt=none',
+                        f'{AUTHORIZE_URL}?response_type=id_token%20token&client_id=client&redirect_uri=https%3A%2F%2Finfo-car.pl%2Fnew%2Fassets%2Frefresh.html&scope=openid%20profile%20email%20resource.read&prompt=none',
                         headers=headers,
                         cookies=cookies,
                         allow_redirects=False,
@@ -172,19 +181,20 @@ class Monitor:
                     logging.error(f"Error while getting auth token: {e}")
                     retries += 1
                     time.sleep(5)
+                    logging.warning(f"Retrying... {retries}/{max_retries}")
+                    continue
+
         logging.error("The login retries limit exceeded. Check your credentials.")
+        exit()
 
 
 
     def scrap_dates(self) -> None:
-        max_retries = 3
-        retries = 0
-
-        try:
-            start_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.953Z")
-            end_date = datetime.now().strftime("2024-%m-%dT%H:%M:%S.953Z")
-            last_date = None
-            while retries < max_retries:
+        start_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.953Z")
+        end_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.953Z")
+        last_date = None
+        while True:
+            try:
                 auth_headers = {
                     'Accept': 'application/json, text/plain, */*',
                     'Accept-Language': 'pl-PL',
@@ -212,12 +222,13 @@ class Monitor:
                 max_date = (datetime.today() + timedelta(days=self.max_exam_time)).timestamp()
 
                 response = requests.put(
-                    'https://info-car.pl/api/word/word-centers/exam-schedule',
+                    EXAM_SCHEDULE_URL,
                     verify=False,
                     headers=auth_headers,
                     json=json_data,
                     timeout=30
                 )
+
                 if response.status_code == 401:
                     logging.warning("Regenerating session...")
                     self.auth_token = self.get_auth_token()
@@ -235,22 +246,20 @@ class Monitor:
                                 logging.debug(f"Wolny termin dnia: {exam_day} na godzine: {exam_time}")
                                 try:
                                     self.send_discord_webhook(exam_day, exam_time)
-                                except:
+                                except Exception:
                                     logging.error("Error while sending discord webhook. Check your webhook url in config.json!")
 
                                 last_date = datetime.strptime(exam_day + " " + exam_time, "%Y-%m-%d %H:%M:%S").timestamp()
                                 break
                             elif datetime.strptime(exam_day + " " + exam_time, "%Y-%m-%d %H:%M:%S").timestamp() > max_date:
                                 break
-                            break
 
-                    time.sleep(self.delay + random.uniform(0,2))
-
-        except Exception as e:
-            logging.error(f"Scrap dates error: {e}")
-            retries += 1
-            time.sleep(5)
-
+                    time.sleep(self.delay + random.uniform(0, 2))
+            except Exception as e:
+                logging.error(f"(RATE LIMIT) Scrap dates error: {e}")
+                logging.warning("Regenerating session...")
+                time.sleep(60)
+                self.auth_token = self.get_auth_token()
 
     def send_discord_webhook(self, exam_day, exam_time) -> None:
         webhook = DiscordWebhook(
